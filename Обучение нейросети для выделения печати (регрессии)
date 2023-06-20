@@ -1,0 +1,107 @@
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout, Activation
+from tensorflow.keras.applications import VGG16                                                                       # Подключение библиотек
+import cv2
+import numpy as np
+from tensorflow.keras.optimizers import Adam
+import os
+import tensorflow as tf
+import random
+
+vgg16_net = VGG16(weights='imagenet',include_top = False, input_shape = (256,256,3))                                   # Загрука сверточных слоев VGG16 с весами для ImageNet
+vgg16_net.trainable = False
+
+model=Sequential()
+model.add(vgg16_net)
+model.add(Flatten())
+model.add(Dense(256))
+model.add(Activation('relu'))                                                                                           # Определение архитектуры нейронной сети для регрессии (предсказания 4 координат печати на изображении)
+model.add(Dropout(0.5))
+model.add(Dense(4))
+model.add(Activation('sigmoid'))
+
+optimizer=Adam(learning_rate=1e-5)
+loss_fn = tf.keras.losses.MeanSquaredError()                                                                          # Создание объектов оптимизатора и функции потерь (отличие от стандартного метода model.compile)
+
+x_batch_train=np.zeros((50,256,256,3))
+y_batch_train=np.zeros((50,4))
+x_batch_val=np.zeros((50,256,256,3))                                                                                     # Создание массивов для считывания мини-батчей из каталогов
+y_batch_val=np.zeros((50,4))
+
+model.load_weights('Regression_weights.h5')                                                                                    # Загрузка весов, полученных при прошлых обучениях
+
+epochs = 5                                 
+for epoch in range(epochs):                                                                                            # Начало цикла обучения
+    epoch_train_loss=0
+    lst = list(range(1, 19001, 1))                                     
+    random.shuffle(lst)                                                                                       # Метод реализующий стандартный shuffle, для случайного выбора объектов из каталогов
+    print('Начинаем эпоху %d' % (epoch,))
+    step=1
+    while (step<=380):                                                                                        # Начало цикла подачи в сеть тренировочного набора данных
+        for i in range(50):
+            generator=cv2.imread('images/d_'+str(lst[i+1+50*(step-1)-1])+'.jpg')                              
+            x_batch_train[i]=(cv2.resize(generator, (256,256)))/255                                           # Заполнение мини-батча тренировочными изображениями (их исходный размер 1050 на 1050), сеть принимает 256 на 256
+            f = open(os.path.join('files','d_'+str(lst[i+1+50*(step-1)-1])+'.txt'),'r')
+            for line in f:
+                ls, us, rs, ds = line.split()
+            y_batch_train[i][0]=int(ls)/1050
+            y_batch_train[i][1]=int(us)/1050                                                                  # Заполнение мини-батча меток тренировочных изображений (координаты печатей) с нормировкой данных 
+            y_batch_train[i][2]=int(rs)/1050
+            y_batch_train[i][3]=int(ds)/1050
+            f.close()
+            ls=us=rs=ds=0
+        with tf.GradientTape() as tape:
+            logits = model(x_batch_train, training=True)
+            loss_value = loss_fn(y_batch_train, logits)                                                         # Вычисление функции потерь на мини-батче
+        epoch_train_loss+=loss_value
+        grads = tape.gradient(loss_value, model.trainable_weights)
+        optimizer.apply_gradients(zip(grads, model.trainable_weights))                                          # Изменение весов нейронной сети 
+        print(step,' ', loss_value)
+        step+=1
+    print('Потери на эпохе: %s' % (float(epoch_train_loss/380)))                                                 # Вывод средней функции потерь на тренировочном наборе за эпоху
+    step_val=1
+    epoch_val_loss=0
+    while (step_val<=110):                                                                                       # Начало цикла вычисления средней функции потерь на валидационной выборке
+        for i in range(50):
+            generator=cv2.imread('validation/val_im/d_'+str(15850+i+1+50*(step_val-1))+'.jpg')
+            x_batch_val[i]=(cv2.resize(generator, (256,256)))/255
+            f = open(os.path.join('validation','val_file','d_'+str(15850+i+1+50*(step_val-1))+'.txt'),'r')
+            for line in f:
+                ls, us, rs, ds = line.split()
+            y_batch_val[i][0]=int(ls)/1050                                                                        # Заполнение валидационных мини-батчей 
+            y_batch_val[i][1]=int(us)/1050
+            y_batch_val[i][2]=int(rs)/1050
+            y_batch_val[i][3]=int(ds)/1050
+            f.close()
+            ls=us=rs=ds=0
+        with tf.GradientTape() as tape:
+            logits_val = model(x_batch_val)
+            loss_value_val = loss_fn(y_batch_val, logits_val)                                                      # Вычисление функции потерь на валидационном мини-батче
+        epoch_val_loss+=loss_value_val
+        print(step_val,' ',loss_value_val)
+        step_val+=1
+    print('Потери на валидации: %s' % (float(epoch_val_loss/110)))                                                  # Вывод средней функции потерь на валидационном наборе 
+  
+model.save_weights('Regression_weights.h5')                                                                         # Сохранение весов после обучения
+  
+test_image_num=249                                                                                            # Проверка работы выделения печати с помощью создания предсказательной рамки
+
+test_image=cv2.imread('images/d_'+str(test_image_num)+'.jpg')
+test_image=cv2.resize(test_image,(256,256))
+test_image_norma=test_image/255                                                                                     # Загрузка тестируемого изображения и его нормировка
+test_image_norma=np.expand_dims(test_image_norma,axis=0)
+prediction=model.predict(test_image_norma)
+lps=int(prediction[0][0]*256)
+ups=int(prediction[0][1]*256)
+rps=int(prediction[0][2]*256)                                                                                       # Предсказание координат и приведение их к формату 256 на 256
+dps=int(prediction[0][3]*256)
+lps=(lps if lps>=0 else 0)
+ups=(ups if ups>=0 else 0)
+rps=(rps if rps<=255 else 255)                                                                                      # Проверка на выход за границы
+dps=(dps if dps<=255 else 255)
+ramka=cv2.rectangle(test_image,(lps,ups),(rps,dps),(0,0,255),thickness=3)                                           # Создание предсказательной рамки
+ 
+cv2.imshow('result',ramka)                                                                                          # Вывод на экран
+cv2.waitKey(0)
+
