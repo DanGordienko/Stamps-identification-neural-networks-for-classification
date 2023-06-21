@@ -1,48 +1,108 @@
-import numpy as np
-import cv2
 import os
+import shutil
+import cv2
 import random
+import numpy as np
 
-for k in range(1,11):
-    pech=cv2.imread('pechats/'+str(k)+'.jpg')
-    pech=cv2.cvtColor(pech, cv2.COLOR_BGR2RGB)
-    gray=cv2.cvtColor(pech, cv2.COLOR_RGB2GRAY)
-    for m in range(1,318):
-            _, binary = cv2.threshold(gray, thresholds[k], 255, cv2.THRESH_BINARY)
-            flip_flag=random.choice([0,1])
-            if (flip_flag):
-                flip_degree=random.choice([0,1])
-                binary = cv2.flip(binary, flip_degree)
-            cut_flag=random.choice([0,1])
-            if (cut_flag):
-                cut_side=random.choice([1,2,3,4])
-                if (cut_side==1):
-                    binary = binary[binary.shape[0]//10:,:]
-                if (cut_side==2):
-                    binary = binary[:binary.shape[0]-binary.shape[0]//10,:]
-                if (cut_side==3):
-                    binary = binary[:,binary.shape[1]//10:]
-                if (cut_side==4):
-                    binary = binary[:,:binary.shape[1]-binary.shape[1]//10]
-            stride_0=random.randint(0,1050-binary.shape[0]-10)
-            stride_1=random.randint(0,1050-binary.shape[1]-10)
-            beg_i=stride_0
-            fin_i=stride_0+binary.shape[0]
-            beg_j=stride_1
-            fin_j=stride_1+binary.shape[1]
-            ls=left_side(binary)+stride_1
-            rs=right_side(binary)+stride_1
-            us=up_side(binary)+stride_0
-            ds=down_side(binary)+stride_0
-            sheet=cv2.imread('ready_lists/list'+str(m)+'.jpg')
-            color=random.choice([[0,0,0], [250,12,44], [201,9,222]])
-            for i in range(beg_i,fin_i):
-                for j in range(beg_j,fin_j):
-                    if all(binary[i-beg_i][j-beg_j]==[0,0,0]):
-                        sheet[i][j][0]=color[0]
-                        sheet[i][j][1]=color[1]
-                        sheet[i][j][2]=color[2]
-            cv2.imwrite('detection_source/images/'+'d_'+str(15850+m+317*(k-1))+'.jpg', sheet)
-            f = open(os.path.join('detection_source','files','d_'+str(15850+m+317*(k-1))+'.txt'),'w')
-            f.write(str(ls)+' '+str(us)+' '+str(rs)+' '+str(ds))
-            f.close()
+os.makedirs(detect_image_source)
+os.makedirs(detect_file_source)
+os.makedirs(class_image_source)
+
+for i in range(1,11):
+    os.makedirs(class_image_source+'/'+str(i))
+
+thresholds=[215,215,220,220,220,220,210,225,215,220]
+
+def left_side(image):
+    left=image.shape[1]-1
+    j=0
+    for i in range(image.shape[0]):
+        while (image[i][j]!=0 and j<image.shape[1]-1):
+            j+=1
+        if left>=j:
+            left=j
+        j=0
+    return left
+
+def right_side(image):
+    right=0
+    j=binary.shape[1]-1
+    for i in range(binary.shape[0]):
+        while (binary[i][j]!=0 and j>1):
+            j-=1
+        if right<=j:
+            right=j
+        j=binary.shape[1]-1
+    return right
+
+def down_side(image):
+    down=0
+    j=image.shape[0]-1
+    for i in range(image.shape[1]):
+        while (image[j][i]!=0 and j>0):
+            j-=1
+        if down<=j:
+            down=j
+        j=image.shape[0]-1
+    return down
+
+def up_side(image):
+    up=image.shape[0]-1
+    j=0
+    for i in range(image.shape[1]):
+        while (image[j][i]!=0 and j<image.shape[0]-1):
+            j+=1
+        if up>=j:
+            up=j
+        j=0
+    return up
+
+def generate_datasets(stamp_source,list_source,detect_image_source,detect_file_source,class_image_source,iterations,current_amount):
+    for iteration in range(iterations):
+        for k in range(1,11):
+            pech=cv2.imread(stamp_source+'/'+str(k)+'.jpg')
+            pech=cv2.cvtColor(pech, cv2.COLOR_BGR2RGB)
+            gray=cv2.cvtColor(pech, cv2.COLOR_RGB2GRAY)
+            for m in range(1,318):
+                    _, binary = cv2.threshold(gray, thresholds[k-1], 255, cv2.THRESH_BINARY)
+                    flip_flag=random.choice([0,1])
+                    if (flip_flag):
+                        flip_degree=random.choice([0,1])
+                        binary = cv2.flip(binary, flip_degree)
+                    cut_flag=random.choice([0,1])
+                    if (cut_flag):
+                        cut_side=random.choice([1,2,3,4])
+                        if (cut_side==1):
+                            binary = binary[binary.shape[0]//10:,:]
+                        if (cut_side==2):
+                            binary = binary[:binary.shape[0]-binary.shape[0]//10,:]
+                        if (cut_side==3):
+                            binary = binary[:,binary.shape[1]//10:]
+                        if (cut_side==4):
+                            binary = binary[:,:binary.shape[1]-binary.shape[1]//10]
+                    stride_0=random.randint(0,1050-binary.shape[0]-10)
+                    stride_1=random.randint(0,1050-binary.shape[1]-10)
+                    beg_i=stride_0
+                    fin_i=stride_0+binary.shape[0]
+                    beg_j=stride_1
+                    fin_j=stride_1+binary.shape[1]
+                    ls=left_side(binary)+stride_1
+                    rs=right_side(binary)+stride_1
+                    us=up_side(binary)+stride_0
+                    ds=down_side(binary)+stride_0
+                    sheet=cv2.imread(list_source+'/'+'list'+str(m)+'.jpg')
+                    color=random.choice([[0,0,0], [250,12,44], [201,9,222]])
+                    for i in range(beg_i,fin_i):
+                        for j in range(beg_j,fin_j):
+                            if all(binary[i-beg_i][j-beg_j]==[0,0,0]):
+                                sheet[i][j][0]=color[0]
+                                sheet[i][j][1]=color[1]
+                                sheet[i][j][2]=color[2]
+                    cv2.imwrite(detect_image_source+'/'+str(current_amount+m+317*(k-1))+'.jpg', sheet)
+                    f = open(detect_file_source+'/'+str(current_amount+m+317*(k-1))+'.txt','w')
+                    f.write(str(ls)+' '+str(us)+' '+str(rs)+' '+str(ds))
+                    f.close()
+                    cut_image=sheet[us:ds,ls:rs]
+                    cv2.resize(cut_image, (256,256))
+                    cv2.imwrite(class_image_source+'/'+str(k)+'/'+str(current_amount+m+317*(k-1))+'.jpg', cut_image)
+        current_amount+=3170
