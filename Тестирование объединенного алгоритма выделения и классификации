@@ -1,63 +1,66 @@
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout, Activation
-from tensorflow.keras.applications import VGG16
+from tensorflow.keras.applications import VGG16                                                                            # Подключение библиотек
 import cv2
+import os
+import numpy as np
 
 
-vgg16_net = VGG16(weights='imagenet',include_top = False, input_shape = (256,256,3))
+vgg16_net = VGG16(weights='imagenet',include_top = False, input_shape = (256,256,3))                                        # Загрузка сверточных слоев с весами ImageNet
 vgg16_net.trainable = False
 
 model_class=Sequential()
 model_class.add(vgg16_net)
 model_class.add(Flatten())
-model_class.add(Dense(256))
+model_class.add(Dense(256))                                                                                                 # Определение архитектуры нейросети для классификации
 model_class.add(Activation('relu'))
 model_class.add(Dropout(0.5))
 model_class.add(Dense(10))
 model_class.add(Activation('softmax'))
 
-model_class.compile(loss='categorical_crossentropy', optimizer=Adam(learning_rate=1e-5), metrics=['accuracy'])
+model_class.compile(loss='categorical_crossentropy', optimizer=Adam(learning_rate=1e-5), metrics=['accuracy'])              # Определение параметров и весов нейросети для классификации
 model_class.load_weights('WGGWeights_softmax.h5')
 
 model_det=Sequential()
 model_det.add(vgg16_net)
 model_det.add(Flatten())
 model_det.add(Dense(256))
-model_det.add(Activation('relu'))
-model_det.add(Dropout(0.5))
+model_det.add(Activation('relu'))                                                        
+model_det.add(Dropout(0.5))                                                                                                  # Определение архитектуры нейросети для выделения печати
 model_det.add(Dense(4))
 model_det.add(Activation('sigmoid'))
 
-model_det.compile(loss='mean_squared_error', optimizer=Adam(learning_rate=1e-5))
-model_det.load_weights('Regression_weights.h5')
+model_det.compile(loss='mean_squared_error', optimizer=Adam(learning_rate=1e-5))                                              
+model_det.load_weights('Regression_weights.h5')                                                                              # Определение параметров и весов нейросети для классификации
 
-counter=0
-for i in range(15851,16168):
-    test_image=cv2.imread('validation/val_im/d_'+str(i)+'.jpg')
-    rto=cv2.resize(test_image,(256,256))
-    rto=rto/255
-    rto=np.expand_dims(rto,axis=0)
-    prediction=model_det.predict(rto)
+pech_type=1
+counter=0                                                                                                                    # Начало алгоритма тестирования для конкретного типа печатей (pech_type)
+for file in os.listdir('class_val_images/'+str(pech_type)+'/'):
+    test_image=cv2.imread('class_val_images/'+str(pech_type)+'/'+file)
+    test_image_norma=cv2.resize(test_image,(256,256))
+    test_image_norma=test_image_norma/255                                                                                    # Загрузка и нормирование входного изображения 
+    test_image_norma=np.expand_dims(test_image_norma,axis=0)
+    prediction=model_det.predict(test_image_norma)
     lps=int(prediction[0][0]*1050)
     ups=int(prediction[0][1]*1050)
-    rps=int(prediction[0][2]*1050)
-    dps=int(prediction[0][3]*1050)
+    rps=int(prediction[0][2]*1050)                                                                                           # Предсказание координат и их приведение к размеру 1050 на 1050 
+    dps=int(prediction[0][3]*1050)                                                                                             
     lps=(lps if lps>=0 else 0)
     ups=(ups if ups>=0 else 0)
-    rps=(rps if rps<=1049 else 1049)
+    rps=(rps if rps<=1049 else 1049)                                                                                          # Проверка выхода за рамки
     dps=(dps if dps<=1049 else 1049)
-    obr=test_image[ups:dps,lps:rps]
-    obr=cv2.resize(obr,(256,256))
-    obr=obr/255
-    obr=np.expand_dims(obr,axis=0)
-    final_prediction=model_class.predict(obr) 
-    maxx=0
-    index=0
+    class_image=test_image[ups:dps,lps:rps]
+    class_image=cv2.resize(class_image,(256,256))
+    class_image=class_image/255                                                                                               # Формирование изображения для классификации
+    class_image=np.expand_dims(class_image,axis=0)
+    final_prediction=model_class.predict(class_image) 
+    max_pred=0
+    index_pred=0
     for j in range(10):
-        if final_prediction[0][j]>maxx:
-            maxx=final_prediction[0][j]
-            index=j
-    if (index==0):
+        if final_prediction[0][j]>max_pred:                                                                                    # Классификация и выбор наиболее вероятного класса 
+            max_pred=final_prediction[0][j]
+            index_pred=j
+    if (index_pred==pech_type-1):
         counter+=1
-print(counter/317)
+print(counter/320)                                                                                                              # В папке class_val_images по 320 изображений для каждого из 10 типов печатей
     
