@@ -9,6 +9,9 @@ import os
 import tensorflow as tf
 import random
 
+# Обучение происходит на сгенерированных датасетах, находящихся в каталогах detect_train_images, detect_train_files, содержащих 12650 изображений и файлов соответственно.
+# Валидационные каталоги содержат по 3200 изображений и файлов (см. Алгоритм генерации).
+
 vgg16_net = VGG16(weights='imagenet',include_top = False, input_shape = (256,256,3))                                   # Загрука сверточных слоев VGG16 с весами для ImageNet
 vgg16_net.trainable = False
 
@@ -29,20 +32,20 @@ y_batch_train=np.zeros((50,4))
 x_batch_val=np.zeros((50,256,256,3))                                                                                     # Создание массивов для считывания мини-батчей из каталогов
 y_batch_val=np.zeros((50,4))
 
-model.load_weights('Regression_weights.h5')                                                                                    # Загрузка весов, полученных при прошлых обучениях
+model.load_weights('Regression_weights.h5')                                                                                    # Загрузка весов, полученных при прошлых обучениях (файл с весами в репозитории)
 
 epochs = 5                                 
 for epoch in range(epochs):                                                                                            # Начало цикла обучения
     epoch_train_loss=0
-    lst = list(range(1, 19001, 1))                                     
+    lst = list(range(1, 12651, 1))                                     
     random.shuffle(lst)                                                                                       # Метод реализующий стандартный shuffle, для случайного выбора объектов из каталогов
     print('Начинаем эпоху %d' % (epoch,))
     step=1
-    while (step<=380):                                                                                        # Начало цикла подачи в сеть тренировочного набора данных
+    while (step<=253):                                                                                        # Начало цикла подачи в сеть тренировочного набора данных
         for i in range(50):
-            generator=cv2.imread('images/d_'+str(lst[i+1+50*(step-1)-1])+'.jpg')                              
+            generator=cv2.imread('detect_train_images/'+str(lst[i+1+50*(step-1)-1])+'.jpg')                              
             x_batch_train[i]=(cv2.resize(generator, (256,256)))/255                                           # Заполнение мини-батча тренировочными изображениями (их исходный размер 1050 на 1050), сеть принимает 256 на 256
-            f = open(os.path.join('files','d_'+str(lst[i+1+50*(step-1)-1])+'.txt'),'r')
+            f = open('detect_train_files/'+str(lst[i+1+50*(step-1)-1])+'.txt','r')
             for line in f:
                 ls, us, rs, ds = line.split()
             y_batch_train[i][0]=int(ls)/1050
@@ -59,14 +62,14 @@ for epoch in range(epochs):                                                     
         optimizer.apply_gradients(zip(grads, model.trainable_weights))                                          # Изменение весов нейронной сети 
         print(step,' ', loss_value)
         step+=1
-    print('Потери на эпохе: %s' % (float(epoch_train_loss/380)))                                                 # Вывод средней функции потерь на тренировочном наборе за эпоху
+    print('Потери на эпохе: %s' % (float(epoch_train_loss/253)))                                                 # Вывод средней функции потерь на тренировочном наборе за эпоху
     step_val=1
     epoch_val_loss=0
-    while (step_val<=110):                                                                                       # Начало цикла вычисления средней функции потерь на валидационной выборке
+    while (step_val<=64):                                                                                       # Начало цикла вычисления средней функции потерь на валидационной выборке
         for i in range(50):
-            generator=cv2.imread('validation/val_im/d_'+str(15850+i+1+50*(step_val-1))+'.jpg')
+            generator=cv2.imread('detect_val_images/'+str(i+1+50*(step_val-1))+'.jpg')
             x_batch_val[i]=(cv2.resize(generator, (256,256)))/255
-            f = open(os.path.join('validation','val_file','d_'+str(15850+i+1+50*(step_val-1))+'.txt'),'r')
+            f = open('detect_val_files'+str(i+1+50*(step_val-1))+'.txt','r')
             for line in f:
                 ls, us, rs, ds = line.split()
             y_batch_val[i][0]=int(ls)/1050                                                                        # Заполнение валидационных мини-батчей 
@@ -81,13 +84,13 @@ for epoch in range(epochs):                                                     
         epoch_val_loss+=loss_value_val
         print(step_val,' ',loss_value_val)
         step_val+=1
-    print('Потери на валидации: %s' % (float(epoch_val_loss/110)))                                                  # Вывод средней функции потерь на валидационном наборе 
+    print('Потери на валидации: %s' % (float(epoch_val_loss/64)))                                                  # Вывод средней функции потерь на валидационном наборе 
   
 model.save_weights('Regression_weights.h5')                                                                         # Сохранение весов после обучения
   
-test_image_num=249                                                                                            # Проверка работы выделения печати с помощью создания предсказательной рамки
+test_image_num=1                                                                                           # Проверка работы выделения печати с помощью создания предсказательной рамки
 
-test_image=cv2.imread('images/d_'+str(test_image_num)+'.jpg')
+test_image=cv2.imread('detect_val_images/'+str(test_image_num)+'.jpg')
 test_image=cv2.resize(test_image,(256,256))
 test_image_norma=test_image/255                                                                                     # Загрузка тестируемого изображения и его нормировка
 test_image_norma=np.expand_dims(test_image_norma,axis=0)
